@@ -5,7 +5,6 @@
 
 #include "esp_log.h"
 #include "periph_ilidriver.h"
-#include "pretty_effect.h"
 
 #define SPI_PARALLEL_LINES 				16
 
@@ -168,6 +167,13 @@ static uint16_t _get_screen_height(ilidriver_size_t size)
 	return height;
 }
 
+static void _pre_transfer_callback(spi_transaction_t *t)
+{
+	periph_ilidriver_t *periph_ilidriver = esp_periph_get_data(g_ilidriver);
+	int dc = (int)t->user;
+	gpio_set_level(periph_ilidriver->dc, dc);
+}
+
 static void _write_cmd(spi_device_handle_t spi, const uint8_t cmd)
 {
 	esp_err_t ret;
@@ -193,13 +199,6 @@ static void _write_data(spi_device_handle_t spi, const uint8_t *data, int len)
 	assert(ret == ESP_OK);
 }
 
-static void _pre_transfer_callback(spi_transaction_t *t)
-{
-	periph_ilidriver_t *periph_ilidriver = esp_periph_get_data(g_ilidriver);
-	int dc = (int)t->user;
-	gpio_set_level(periph_ilidriver->dc, dc);
-}
-
 static void _write_lines(spi_device_handle_t spi, int ypos, uint16_t *linedata)
 {
 	periph_ilidriver_t *periph_ilidriver = esp_periph_get_data(g_ilidriver);
@@ -223,7 +222,7 @@ static void _write_lines(spi_device_handle_t spi, int ypos, uint16_t *linedata)
 	}
 	trans[0].tx_data[0] = 0x2A;         													/*!< Command set column address */
 	trans[1].tx_data[0] = 0;            													/*!< Start column high */
-	trans[1].tx_data[1] = 0;           														/*!<Start column low  */
+	trans[1].tx_data[1] = 0;           														/*!< Start column low  */
 	trans[1].tx_data[2] = (periph_ilidriver->width) >> 8;   								/*!< End column high */
 	trans[1].tx_data[3] = (periph_ilidriver->width) & 0xff; 								/*!< End column low */
 	trans[2].tx_data[0] = 0x2B;         													/*!< Command set page address */
@@ -252,26 +251,77 @@ static void _write_line_finish(spi_device_handle_t spi)
 	}
 }
 
+static void _draw_pixel(uint16_t x, uint16_t y, uint32_t color)
+{
+	periph_ilidriver_t *periph_ilidriver = esp_periph_get_data(g_ilidriver);
+
+	uint8_t *p = periph_ilidriver->buf + (x + y * periph_ilidriver->width) * 3;
+	p[0] = (color >> 16) & 0xFF;
+	p[1] = (color >> 8) & 0xFF;
+	p[2] = (color >> 0) & 0xFF;
+}
+
+static void _draw_line(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint32_t color)
+{
+	int32_t deltaX = abs(x2 - x1);
+	int32_t deltaY = abs(y2 - y1);
+	int32_t signX = ((x1 < x2) ? 1 : -1);
+	int32_t signY = ((y1 < y2) ? 1 : -1);
+	int32_t error = deltaX - deltaY;
+	int32_t error2;
+
+	_draw_pixel(x2, y2, color);
+
+	while ((x1 != x2) || (y1 != y2))
+	{
+		_draw_pixel(x1, y1, color);
+
+		error2 = error * 2;
+		if (error2 > -deltaY) {
+			error -= deltaY;
+			x1 += signX;
+		} else {
+			/*nothing to do*/
+		}
+
+		if (error2 < deltaX) {
+			error += deltaX;
+			y1 += signY;
+		} else {
+			/*nothing to do*/
+		}
+	}
+}
+
+static void _convert_pixel_to_lines(int height_idx)
+{
+	periph_ilidriver_t *periph_ilidriver = esp_periph_get_data(g_ilidriver);
+
+	for (int idx = 0; idx < (periph_ilidriver->width * SPI_PARALLEL_LINES); idx++) {
+		uint8_t *p_src = periph_ilidriver->buf + periph_ilidriver->width * height_idx * 3 + idx * 3;
+		uint16_t *p_desc = periph_ilidriver->lines[periph_ilidriver->lines_idx].data + idx;
+
+		uint32_t rgb = (p_src[0] << 16) | (p_src[1] << 8) | (p_src[2]);
+		uint16_t swap565;
+		rgb_2_swap565(rgb, &swap565);
+		*p_desc = swap565;
+	}
+}
+
 static void _ilidriver_task(void *pv)
 {
 	esp_periph_handle_t periph = (esp_periph_handle_t)pv;
 	periph_ilidriver_t *periph_ilidriver = esp_periph_get_data(periph);
 
-	pretty_effect_init();
-
-	int frame = 0;
 	int sending_line = -1;
 
 	while (periph_ilidriver->is_started) {
 		if (!periph_ilidriver->pause) {
-			frame++;
-			for (int y = 0; y < 240; y += SPI_PARALLEL_LINES) {
-				pretty_effect_calc_lines(periph_ilidriver->lines[periph_ilidriver->lines_idx].data, y, frame, SPI_PARALLEL_LINES);
-
+			for (int y = 0; y < periph_ilidriver->height; y += SPI_PARALLEL_LINES) {
 				if (sending_line != -1) {
 					_write_line_finish(periph_ilidriver->spi);
 				}
-
+				_convert_pixel_to_lines(y);
 				sending_line = periph_ilidriver->lines_idx;
 				_write_lines(periph_ilidriver->spi, y, periph_ilidriver->lines[sending_line].data);
 				periph_ilidriver->lines_idx ^= 1;
@@ -293,7 +343,7 @@ static esp_err_t _ilidriver_init(esp_periph_handle_t self)
 			.sclk_io_num = periph_ilidriver->clk,
 			.quadwp_io_num = -1,
 			.quadhd_io_num = -1,
-			.max_transfer_sz = SPI_PARALLEL_LINES * 320 * 2 + 8
+			.max_transfer_sz = SPI_PARALLEL_LINES * periph_ilidriver->width * sizeof(uint16_t) + 8
 		};
 		spi_device_interface_config_t devcfg = {
 			.clock_speed_hz = 10 * 1000 * 1000,
@@ -371,6 +421,8 @@ esp_periph_handle_t periph_ilidriver_init(periph_ilidriver_cfg_t *config)
 		return NULL;
 	});
 
+	memset(periph_ilidriver->buf, 0xFF, width * height * 3 * sizeof(uint8_t));
+
 	periph_ilidriver->lines[0].data = heap_caps_malloc(width * SPI_PARALLEL_LINES * sizeof(uint16_t), MALLOC_CAP_DMA);
 	periph_ilidriver->lines[1].data = heap_caps_malloc(width * SPI_PARALLEL_LINES * sizeof(uint16_t), MALLOC_CAP_DMA);
 
@@ -398,4 +450,113 @@ esp_periph_handle_t periph_ilidriver_init(periph_ilidriver_cfg_t *config)
 	g_ilidriver = periph;
 
 	return periph;
+}
+
+esp_err_t periph_ilidriver_fill(esp_periph_handle_t periph, uint32_t color)
+{
+	VALIDATE_ILIDRIVER(periph, ESP_FAIL);
+	periph_ilidriver_t *periph_ilidriver = esp_periph_get_data(periph);
+
+	uint16_t width = periph_ilidriver->width;
+	uint16_t height = periph_ilidriver->height;
+
+	for (int idx = 0; idx < (width * height); idx++) {
+		uint8_t *p = periph_ilidriver->buf + idx * 3;
+
+		p[0] = (color >> 16) & 0xFF;
+		p[1] = (color >> 8) & 0xFF;
+		p[2] = (color >> 0) & 0xFF;
+	}
+
+	return ESP_OK;
+}
+
+esp_err_t periph_ilidriver_draw_pixel(esp_periph_handle_t periph, uint16_t x, uint16_t y, uint32_t color)
+{
+	VALIDATE_ILIDRIVER(periph, ESP_FAIL);
+	_draw_pixel(x, y, color);
+
+	return ESP_OK;
+}
+
+esp_err_t periph_ilidriver_draw_line(esp_periph_handle_t periph, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint32_t color)
+{
+	VALIDATE_ILIDRIVER(periph, ESP_FAIL);
+	_draw_line(x1, y1, x2, y2, color);
+
+	return ESP_OK;
+}
+
+esp_err_t periph_ilidriver_draw_rectangle(esp_periph_handle_t periph, uint16_t x_origin, uint16_t y_origin, uint16_t width, uint16_t height, uint32_t color)
+{
+	VALIDATE_ILIDRIVER(periph, ESP_FAIL);
+
+	_draw_line(x_origin, y_origin, x_origin + width, y_origin, color);
+	_draw_line(x_origin + width, y_origin, x_origin + width, y_origin + height, color);
+	_draw_line(x_origin + width, y_origin + height, x_origin, y_origin + height, color);
+	_draw_line(x_origin, y_origin + height, x_origin, y_origin, color);
+
+	return ESP_OK;
+}
+
+esp_err_t periph_ilidriver_draw_circle(esp_periph_handle_t periph, uint16_t x_origin, uint16_t y_origin, uint16_t radius, uint32_t color)
+{
+	VALIDATE_ILIDRIVER(periph, ESP_FAIL);
+
+	int32_t x = -radius;
+	int32_t y = 0;
+	int32_t err = 2 - 2 * radius;
+	int32_t e2;
+
+	do {
+		_draw_pixel(x_origin - x, y_origin + y, color);
+		_draw_pixel(x_origin + x, y_origin + y, color);
+		_draw_pixel(x_origin + x, y_origin - y, color);
+		_draw_pixel(x_origin - x, y_origin - y, color);
+
+		e2 = err;
+		if (e2 <= y) {
+			y++;
+			err = err + (y * 2 + 1);
+			if (-x == y && e2 <= x) {
+				e2 = 0;
+			}
+			else {
+				/*nothing to do*/
+			}
+		} else {
+			/*nothing to do*/
+		}
+
+		if (e2 > x) {
+			x++;
+			err = err + (x * 2 + 1);
+		} else {
+			/*nothing to do*/
+		}
+	} while (x <= 0);
+
+	return ESP_OK;
+}
+
+esp_err_t periph_ilidriver_set_position(esp_periph_handle_t periph, uint16_t x, uint16_t y)
+{
+	VALIDATE_ILIDRIVER(periph, ESP_FAIL);
+
+	periph_ilidriver_t *periph_ilidriver = esp_periph_get_data(g_ilidriver);
+	periph_ilidriver->pos_x = x;
+	periph_ilidriver->pos_y = y;
+
+	return ESP_OK;
+}
+
+esp_err_t periph_ilidriver_get_position(esp_periph_handle_t periph, uint16_t *x, uint16_t *y)
+{
+	VALIDATE_ILIDRIVER(periph, ESP_FAIL);
+
+	periph_ilidriver_t *periph_ilidriver = esp_periph_get_data(g_ilidriver);
+	*x = periph_ilidriver->pos_x;
+	*y = periph_ilidriver->pos_y;
+
+	return ESP_OK;
 }

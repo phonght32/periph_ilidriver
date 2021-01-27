@@ -8,9 +8,10 @@ extern "C" {
 #include "esp_err.h"
 #include "esp_peripherals.h"
 
+#include "fonts.h"
+#include "colors.h"
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
-#include "fonts.h"
 
 typedef enum {
 	ILIDRIVER_SIZE_320_240 = 0,
@@ -42,6 +43,13 @@ typedef struct {
 } periph_ilidriver_cfg_t;
 
 esp_periph_handle_t periph_ilidriver_init(periph_ilidriver_cfg_t *config);
+esp_err_t periph_ilidriver_fill(esp_periph_handle_t periph, uint32_t color);
+esp_err_t periph_ilidriver_draw_pixel(esp_periph_handle_t periph, uint16_t x, uint16_t y, uint32_t color);
+esp_err_t periph_ilidriver_draw_line(esp_periph_handle_t periph, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint32_t color);
+esp_err_t periph_ilidriver_draw_rectangle(esp_periph_handle_t periph, uint16_t x_origin, uint16_t y_origin, uint16_t width, uint16_t height, uint32_t color);
+esp_err_t periph_ilidriver_draw_circle(esp_periph_handle_t periph, uint16_t x_origin, uint16_t y_origin, uint16_t radius, uint32_t color);
+esp_err_t periph_ilidriver_set_position(esp_periph_handle_t periph, uint16_t x, uint16_t y);
+esp_err_t periph_ilidriver_get_position(esp_periph_handle_t periph, uint16_t *x, uint16_t *y);
 
 #ifdef __cplusplus
 }
