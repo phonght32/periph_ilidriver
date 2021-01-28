@@ -44,6 +44,8 @@ typedef struct {
 
 esp_periph_handle_t periph_ilidriver_init(periph_ilidriver_cfg_t *config);
 esp_err_t periph_ilidriver_fill(esp_periph_handle_t periph, uint32_t color);
+esp_err_t periph_ilidriver_write_char(esp_periph_handle_t periph, font_size_t font_size, uint8_t chr, uint32_t color);
+esp_err_t periph_ilidriver_write_string(esp_periph_handle_t periph, font_size_t font_size, uint8_t *str, uint32_t color);
 esp_err_t periph_ilidriver_draw_pixel(esp_periph_handle_t periph, uint16_t x, uint16_t y, uint32_t color);
 esp_err_t periph_ilidriver_draw_line(esp_periph_handle_t periph, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint32_t color);
 esp_err_t periph_ilidriver_draw_rectangle(esp_periph_handle_t periph, uint16_t x_origin, uint16_t y_origin, uint16_t width, uint16_t height, uint32_t color);

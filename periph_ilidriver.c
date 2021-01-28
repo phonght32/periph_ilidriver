@@ -474,6 +474,60 @@ esp_err_t periph_ilidriver_fill(esp_periph_handle_t periph, uint32_t color)
 	return ESP_OK;
 }
 
+esp_err_t periph_ilidriver_write_char(esp_periph_handle_t periph, font_size_t font_size, uint8_t chr, uint32_t color)
+{
+	VALIDATE_ILIDRIVER(periph, ESP_FAIL);
+	periph_ilidriver_t *periph_ilidriver = esp_periph_get_data(periph);
+
+	font_t font;
+	ILIDRIVER_CHECK(get_font(chr, font_size, &font) > 0, "get font error", return ESP_FAIL);
+
+	uint8_t num_byte_per_row = font.data_len / font.height;
+	for (uint8_t height_idx = 0; height_idx < font.height; height_idx ++) {
+		for ( uint8_t byte_idx = 0; byte_idx < num_byte_per_row; byte_idx++) {
+			for (uint8_t width_idx = 0; width_idx < 8; width_idx++) {
+				uint8_t x = periph_ilidriver->pos_x + width_idx + byte_idx * 8;
+				uint8_t y = periph_ilidriver->pos_y + height_idx;
+				if (((font.data[height_idx * num_byte_per_row + byte_idx] << width_idx) & 0x80) == 0x80) {
+					_draw_pixel(x, y, color);
+				}
+			}
+		}
+	}
+	periph_ilidriver->pos_x += font.width + num_byte_per_row;
+
+	return ESP_OK;
+}
+
+esp_err_t periph_ilidriver_write_string(esp_periph_handle_t periph, font_size_t font_size, uint8_t *str, uint32_t color)
+{
+	VALIDATE_ILIDRIVER(periph, ESP_FAIL);
+	ILIDRIVER_CHECK(str, "error string null", return ESP_FAIL);
+	periph_ilidriver_t *periph_ilidriver = esp_periph_get_data(periph);
+
+	while (*str) {
+		font_t font;
+		ILIDRIVER_CHECK(get_font(*str, font_size, &font) > 0, "get font error", return ESP_FAIL);
+
+		uint8_t num_byte_per_row = font.data_len / font.height;
+		for (uint8_t height_idx = 0; height_idx < font.height; height_idx ++) {
+			for ( uint8_t byte_idx = 0; byte_idx < num_byte_per_row; byte_idx++) {
+				for (uint8_t width_idx = 0; width_idx < 8; width_idx++) {
+					uint8_t x = periph_ilidriver->pos_x + width_idx + byte_idx * 8;
+					uint8_t y = periph_ilidriver->pos_y + height_idx;
+					if (((font.data[height_idx * num_byte_per_row + byte_idx] << width_idx) & 0x80) == 0x80) {
+						_draw_pixel(x, y, color);
+					}
+				}
+			}
+		}
+		periph_ilidriver->pos_x += font.width + num_byte_per_row;
+		str++;
+	}
+
+	return ESP_OK;
+}
+
 esp_err_t periph_ilidriver_draw_pixel(esp_periph_handle_t periph, uint16_t x, uint16_t y, uint32_t color)
 {
 	VALIDATE_ILIDRIVER(periph, ESP_FAIL);
