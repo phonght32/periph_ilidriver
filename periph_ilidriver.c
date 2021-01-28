@@ -482,12 +482,12 @@ esp_err_t periph_ilidriver_write_char(esp_periph_handle_t periph, font_size_t fo
 	font_t font;
 	ILIDRIVER_CHECK(get_font(chr, font_size, &font) > 0, "get font error", return ESP_FAIL);
 
-	uint8_t num_byte_per_row = font.data_len / font.height;
-	for (uint8_t height_idx = 0; height_idx < font.height; height_idx ++) {
+	uint16_t num_byte_per_row = font.data_len / font.height;
+	for (uint16_t height_idx = 0; height_idx < font.height; height_idx ++) {
 		for ( uint8_t byte_idx = 0; byte_idx < num_byte_per_row; byte_idx++) {
-			for (uint8_t width_idx = 0; width_idx < 8; width_idx++) {
-				uint8_t x = periph_ilidriver->pos_x + width_idx + byte_idx * 8;
-				uint8_t y = periph_ilidriver->pos_y + height_idx;
+			for (uint16_t width_idx = 0; width_idx < 8; width_idx++) {
+				uint16_t x = periph_ilidriver->pos_x + width_idx + byte_idx * 8;
+				uint16_t y = periph_ilidriver->pos_y + height_idx;
 				if (((font.data[height_idx * num_byte_per_row + byte_idx] << width_idx) & 0x80) == 0x80) {
 					_draw_pixel(x, y, color);
 				}
@@ -509,12 +509,12 @@ esp_err_t periph_ilidriver_write_string(esp_periph_handle_t periph, font_size_t 
 		font_t font;
 		ILIDRIVER_CHECK(get_font(*str, font_size, &font) > 0, "get font error", return ESP_FAIL);
 
-		uint8_t num_byte_per_row = font.data_len / font.height;
-		for (uint8_t height_idx = 0; height_idx < font.height; height_idx ++) {
-			for ( uint8_t byte_idx = 0; byte_idx < num_byte_per_row; byte_idx++) {
-				for (uint8_t width_idx = 0; width_idx < 8; width_idx++) {
-					uint8_t x = periph_ilidriver->pos_x + width_idx + byte_idx * 8;
-					uint8_t y = periph_ilidriver->pos_y + height_idx;
+		uint16_t num_byte_per_row = font.data_len / font.height;
+		for (uint16_t height_idx = 0; height_idx < font.height; height_idx ++) {
+			for ( uint16_t byte_idx = 0; byte_idx < num_byte_per_row; byte_idx++) {
+				for (uint16_t width_idx = 0; width_idx < 8; width_idx++) {
+					uint16_t x = periph_ilidriver->pos_x + width_idx + byte_idx * 8;
+					uint16_t y = periph_ilidriver->pos_y + height_idx;
 					if (((font.data[height_idx * num_byte_per_row + byte_idx] << width_idx) & 0x80) == 0x80) {
 						_draw_pixel(x, y, color);
 					}
