@@ -50,6 +50,7 @@ esp_err_t periph_ilidriver_draw_rectangle(esp_periph_handle_t periph, uint16_t x
 esp_err_t periph_ilidriver_draw_circle(esp_periph_handle_t periph, uint16_t x_origin, uint16_t y_origin, uint16_t radius, uint32_t color);
 esp_err_t periph_ilidriver_set_position(esp_periph_handle_t periph, uint16_t x, uint16_t y);
 esp_err_t periph_ilidriver_get_position(esp_periph_handle_t periph, uint16_t *x, uint16_t *y);
+uint8_t *periph_ilidriver_get_buffer(esp_periph_handle_t periph);
 
 #ifdef __cplusplus
 }

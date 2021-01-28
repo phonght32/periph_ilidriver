@@ -398,6 +398,9 @@ static esp_err_t _ilidriver_destroy(esp_periph_handle_t self)
 	VALIDATE_ILIDRIVER(self, ESP_FAIL);
 	periph_ilidriver_t *periph_ilidriver = esp_periph_get_data(self);
 
+	free(periph_ilidriver->lines[0].data);
+	free(periph_ilidriver->lines[1].data);
+	free(periph_ilidriver->buf);
 	free(periph_ilidriver);
 
 	return ESP_OK;
@@ -559,4 +562,11 @@ esp_err_t periph_ilidriver_get_position(esp_periph_handle_t periph, uint16_t *x,
 	*y = periph_ilidriver->pos_y;
 
 	return ESP_OK;
+}
+
+uint8_t *periph_ilidriver_get_buffer(esp_periph_handle_t periph)
+{
+	VALIDATE_ILIDRIVER(periph, NULL);
+	periph_ilidriver_t *periph_ilidriver = esp_periph_get_data(g_ilidriver);
+	return periph_ilidriver->buf;
 }
