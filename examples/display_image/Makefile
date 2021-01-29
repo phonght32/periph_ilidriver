@@ -3,7 +3,7 @@
 # project subdirectory.
 #
 
-PROJECT_NAME := example_periph_ilidriver
+PROJECT_NAME := example_display_image
 
 include $(IDF_PATH)/make/project.mk
 
