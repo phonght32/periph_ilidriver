@@ -327,7 +327,7 @@ static void _ilidriver_task(void *pv)
 				periph_ilidriver->lines_idx ^= 1;
 			}
 		}
-		vTaskDelay(10 / portTICK_RATE_MS);
+		vTaskDelay(1 / portTICK_RATE_MS);
 	}
 	vTaskDelete(NULL);
 }
@@ -346,7 +346,7 @@ static esp_err_t _ilidriver_init(esp_periph_handle_t self)
 			.max_transfer_sz = SPI_PARALLEL_LINES * periph_ilidriver->width * sizeof(uint16_t) + 8
 		};
 		spi_device_interface_config_t devcfg = {
-			.clock_speed_hz = 10 * 1000 * 1000,
+			.clock_speed_hz = 26 * 1000 * 1000,
 			.mode = 0,
 			.spics_io_num = periph_ilidriver->cs,
 			.queue_size = 7,
