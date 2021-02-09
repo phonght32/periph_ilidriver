@@ -521,7 +521,7 @@ esp_err_t periph_ilidriver_write_string(esp_periph_handle_t periph, font_size_t 
 				}
 			}
 		}
-		periph_ilidriver->pos_x += font.width + num_byte_per_row;
+		periph_ilidriver->pos_x += font.width;
 		str++;
 	}
 
