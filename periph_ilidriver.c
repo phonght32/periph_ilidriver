@@ -618,6 +618,25 @@ esp_err_t periph_ilidriver_get_position(esp_periph_handle_t periph, uint16_t *x,
 	return ESP_OK;
 }
 
+esp_err_t periph_ilidriver_pause(esp_periph_handle_t periph)
+{
+	VALIDATE_ILIDRIVER(periph, ESP_FAIL);
+	periph_ilidriver_t *periph_ilidriver = esp_periph_get_data(g_ilidriver);
+	periph_ilidriver->pause = true;
+
+	return ESP_OK;
+
+}
+
+esp_err_t periph_ilidriver_start(esp_periph_handle_t periph)
+{
+	VALIDATE_ILIDRIVER(periph, ESP_FAIL);
+	periph_ilidriver_t *periph_ilidriver = esp_periph_get_data(g_ilidriver);
+	periph_ilidriver->pause = false;
+
+	return ESP_OK;
+}
+
 uint8_t *periph_ilidriver_get_buffer(esp_periph_handle_t periph)
 {
 	VALIDATE_ILIDRIVER(periph, NULL);
