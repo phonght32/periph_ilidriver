@@ -327,7 +327,7 @@ static void _ilidriver_task(void *pv)
 				periph_ilidriver->lines_idx ^= 1;
 			}
 		}
-		vTaskDelay(1 / portTICK_RATE_MS);
+		vTaskDelay(20 / portTICK_RATE_MS);
 	}
 	vTaskDelete(NULL);
 }
