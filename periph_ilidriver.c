@@ -378,7 +378,7 @@ static esp_err_t _ilidriver_init(esp_periph_handle_t self)
 	return ESP_OK;
 }
 
-static esp_err_t _ilidriver_run(esp_periph_handle_t self, audio_event_iface_msg_t *msg)
+static esp_err_t _ilidriver_run(esp_periph_handle_t self, esp_event_iface_msg_t *msg)
 {
 	return ESP_OK;
 }
