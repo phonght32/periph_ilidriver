@@ -6,12 +6,12 @@ extern "C" {
 #endif
 
 #include "esp_err.h"
-#include "esp_peripherals.h"
-
-#include "fonts.h"
-#include "colors.h"
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
+
+#include "esp_peripherals.h"
+#include "fonts.h"
+#include "colors.h"
 
 typedef enum {
 	ILIDRIVER_SIZE_320_240 = 0,

@@ -1,19 +1,9 @@
-#include "freertos/FreeRTOS.h"
-#include "freertos/queue.h"
-#include "freertos/semphr.h"
-#include "freertos/task.h"
-
 #include "esp_log.h"
 #include "periph_ilidriver.h"
 
 #define SPI_PARALLEL_LINES 				16
 
 #define ILIDRIVER_TASK_SIZE 			4*1024
-
-#define mutex_lock(x)					while (xSemaphoreTake(x, portMAX_DELAY) != pdPASS)
-#define mutex_unlock(x) 				xSemaphoreGive(x)
-#define mutex_create()					xSemaphoreCreateMutex()
-#define mutex_destroy(x) 				vQueueDelete(x)
 
 #define VALIDATE_ILIDRIVER(periph, ret) if(!esp_periph_validate(periph, PERIPH_ID_ILIDRIVER)) {		\
 	ESP_LOGE(TAG, "Invalid PERIPH_ID_ILIDRIVER");													\
