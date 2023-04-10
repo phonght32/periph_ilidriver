@@ -1,68 +1,117 @@
+/**
+ * @file periph_ilidriver.c
+ *
+ * ESP-IDF's component controls the display of TFT LCD ILI9341. The RGB565 format
+ * is used to decrease the capacity of data sent on the SPI line.
+ *
+ * MIT License
+ *
+ * Copyright (c) 2023 phonght32
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
 #include "esp_log.h"
 #include "periph_ilidriver.h"
 
+/**
+ * @macro   SPI lines.
+ */
 #define SPI_PARALLEL_LINES 				16
 
+/**
+ * @macro   Task size.
+ */
 #define ILIDRIVER_TASK_SIZE 			4*1024
 
+/**
+ * @macro   Validate peripheral.
+ */
 #define VALIDATE_ILIDRIVER(periph, ret) if(!esp_periph_validate(periph, PERIPH_ID_ILIDRIVER)) {		\
 	ESP_LOGE(TAG, "Invalid PERIPH_ID_ILIDRIVER");													\
 	return ret;																						\
 }
 
+/**
+ * @macro   Peripheral check.
+ */
 #define ILIDRIVER_CHECK(a, str, action) if(!(a)) {                          \
     ESP_LOGE(TAG, "%s:%d (%s):%s", __FILE__, __LINE__, __FUNCTION__, str);  \
     action;                                                                 \
 }
 
+/**
+ * @struct  LCD configuration structure.
+ */
 typedef struct {
-	uint8_t cmd;
+	uint8_t cmd; 			
 	uint8_t data[16];
 	uint8_t databytes; 		/*!< No of data in data; bit 7 = delay after set; 0xFF = end of cmds. */
 } lcd_init_cmd_t;
 
-typedef enum {
-	SELECT_ENABLE = 0,
-	SELECT_DISABLE
-} select_t;
-
-typedef struct {
-	uint8_t cmd;
-	uint8_t data[16];
-	uint8_t databytes;
-} ilidriver_init_cmd_t;
-
+/**
+ * @struct  LCD lines.
+ */
 typedef struct {
 	uint16_t *data;
 } lines_t;
 
+/**
+ * @struct  Peripheral information structure.
+ */
 typedef struct {
-	spi_host_device_t	host;
-	int 				dma_chnl;
-	int 				miso;
-	int 				mosi;
-	int 				clk;
-	int 				rst;
-	int 				cs;
-	int 				dc;
-	int 				bckl;
-	spi_device_handle_t spi;
-	ilidriver_size_t 	size;
-	ilidriver_rot_t 	rot;
-	uint16_t 			width;
-	uint16_t 			height;
-	uint16_t 			pos_x;
-	uint16_t 			pos_y;
-	uint8_t 			*buf;
-	lines_t 			lines[2];
-	uint16_t 			lines_idx;
-	bool 				pause;
-	bool 				is_started;
+	spi_host_device_t	host; 			/*!< SPI host */
+	int 				dma_chnl;		/*!< DMA channel */
+	int 				miso;			/*!< Miso pin */
+	int 				mosi;			/*!< Mosi pin */
+	int 				clk;			/*!< Clock pin */
+	int 				rst;			/*!< Reset pin */
+	int 				cs;				/*!< Chip select pin */
+	int 				dc;				/*!< DC pin */
+	int 				bckl;			/*!< LED backlight pin */
+	spi_device_handle_t spi;			/*!< SPI handle structure */
+	ilidriver_size_t 	size;			/*!< Screen size */
+	ilidriver_rot_t 	rot;			/*!< Screen rotation */
+	uint16_t 			width;			/*!< Screen width */
+	uint16_t 			height;			/*!< Screen height */
+	uint16_t 			pos_x;			/*!< Current horizontal position */
+	uint16_t 			pos_y;			/*!< Current vertical position */
+	uint8_t 			*buf;			/*!< Pointer references to the data buffer */
+	lines_t 			lines[2];		/*!< Pointer references to the line data */
+	uint16_t 			lines_idx;		/*!< Current line index */
+	bool 				pause;			/*!< Screen pause status */
+	bool 				is_started;		/*!< Is started status */
 } periph_ilidriver_t;
 
+/**
+ * @brief   Module tag that is displayed in ESP_LOG.
+ */
 static const char *TAG = "PERIPH_ILIDRIVER";
+
+/**
+ * @brief   Global variable contains peripheral handle structure.
+ */
 static esp_periph_handle_t g_ilidriver;
 
+/**
+ * @array 	LCD initialization commands.    
+ */
 DRAM_ATTR static const lcd_init_cmd_t ili_init_cmds[] = {
 	/* Power contorl B, power control = 0, DC_ENA = 1 */
 	{0xCF, {0x00, 0x83, 0X30}, 3},
@@ -123,6 +172,9 @@ DRAM_ATTR static const lcd_init_cmd_t ili_init_cmds[] = {
 	{0, {0}, 0xff},
 };
 
+/**
+ * @func    _get_screen_width
+ */
 static uint16_t _get_screen_width(ilidriver_size_t size)
 {
 	uint16_t width = 320;
@@ -140,6 +192,9 @@ static uint16_t _get_screen_width(ilidriver_size_t size)
 	return width;
 }
 
+/**
+ * @func    _get_screen_height
+ */
 static uint16_t _get_screen_height(ilidriver_size_t size)
 {
 	uint16_t height = 240;
@@ -157,6 +212,9 @@ static uint16_t _get_screen_height(ilidriver_size_t size)
 	return height;
 }
 
+/**
+ * @func    _pre_transfer_callback
+ */
 static void _pre_transfer_callback(spi_transaction_t *t)
 {
 	periph_ilidriver_t *periph_ilidriver = esp_periph_get_data(g_ilidriver);
@@ -164,6 +222,9 @@ static void _pre_transfer_callback(spi_transaction_t *t)
 	gpio_set_level(periph_ilidriver->dc, dc);
 }
 
+/**
+ * @func    _write_cmd
+ */
 static void _write_cmd(spi_device_handle_t spi, const uint8_t cmd)
 {
 	esp_err_t ret;
@@ -176,6 +237,9 @@ static void _write_cmd(spi_device_handle_t spi, const uint8_t cmd)
 	assert(ret == ESP_OK);
 }
 
+/**
+ * @func    _write_data
+ */
 static void _write_data(spi_device_handle_t spi, const uint8_t *data, int len)
 {
 	esp_err_t ret;
@@ -189,6 +253,9 @@ static void _write_data(spi_device_handle_t spi, const uint8_t *data, int len)
 	assert(ret == ESP_OK);
 }
 
+/**
+ * @func    _write_lines
+ */
 static void _write_lines(spi_device_handle_t spi, int ypos, uint16_t *linedata)
 {
 	periph_ilidriver_t *periph_ilidriver = esp_periph_get_data(g_ilidriver);
@@ -231,6 +298,9 @@ static void _write_lines(spi_device_handle_t spi, int ypos, uint16_t *linedata)
 	}
 }
 
+/**
+ * @func    _write_line_finish
+ */
 static void _write_line_finish(spi_device_handle_t spi)
 {
 	spi_transaction_t *rtrans;
@@ -241,6 +311,9 @@ static void _write_line_finish(spi_device_handle_t spi)
 	}
 }
 
+/**
+ * @func    _draw_pixel
+ */
 static void _draw_pixel(uint16_t x, uint16_t y, uint32_t color)
 {
 	periph_ilidriver_t *periph_ilidriver = esp_periph_get_data(g_ilidriver);
@@ -251,6 +324,9 @@ static void _draw_pixel(uint16_t x, uint16_t y, uint32_t color)
 	p[2] = (color >> 0) & 0xFF;
 }
 
+/**
+ * @func    _draw_line
+ */
 static void _draw_line(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint32_t color)
 {
 	int32_t deltaX = abs(x2 - x1);
@@ -283,6 +359,9 @@ static void _draw_line(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint3
 	}
 }
 
+/**
+ * @func    _convert_pixel_to_lines
+ */
 static void _convert_pixel_to_lines(int height_idx)
 {
 	periph_ilidriver_t *periph_ilidriver = esp_periph_get_data(g_ilidriver);
@@ -298,6 +377,9 @@ static void _convert_pixel_to_lines(int height_idx)
 	}
 }
 
+/**
+ * @func    _ilidriver_task
+ */
 static void _ilidriver_task(void *pv)
 {
 	esp_periph_handle_t periph = (esp_periph_handle_t)pv;
@@ -322,6 +404,9 @@ static void _ilidriver_task(void *pv)
 	vTaskDelete(NULL);
 }
 
+/**
+ * @func    _ilidriver_init
+ */
 static esp_err_t _ilidriver_init(esp_periph_handle_t self)
 {
 	VALIDATE_ILIDRIVER(self, ESP_FAIL);
@@ -378,11 +463,17 @@ static esp_err_t _ilidriver_init(esp_periph_handle_t self)
 	return ESP_OK;
 }
 
+/**
+ * @func    _ilidriver_run
+ */
 static esp_err_t _ilidriver_run(esp_periph_handle_t self, esp_event_iface_msg_t *msg)
 {
 	return ESP_OK;
 }
 
+/**
+ * @func    _ilidriver_destroy
+ */
 static esp_err_t _ilidriver_destroy(esp_periph_handle_t self)
 {
 	VALIDATE_ILIDRIVER(self, ESP_FAIL);
@@ -396,6 +487,9 @@ static esp_err_t _ilidriver_destroy(esp_periph_handle_t self)
 	return ESP_OK;
 }
 
+/**
+ * @func    periph_ilidriver_init
+ */
 esp_periph_handle_t periph_ilidriver_init(periph_ilidriver_cfg_t *config)
 {
 	ILIDRIVER_CHECK(config, "error config null", return NULL);
@@ -445,6 +539,9 @@ esp_periph_handle_t periph_ilidriver_init(periph_ilidriver_cfg_t *config)
 	return periph;
 }
 
+/**
+ * @func    periph_ilidriver_fill
+ */
 esp_err_t periph_ilidriver_fill(esp_periph_handle_t periph, uint32_t color)
 {
 	VALIDATE_ILIDRIVER(periph, ESP_FAIL);
@@ -464,6 +561,9 @@ esp_err_t periph_ilidriver_fill(esp_periph_handle_t periph, uint32_t color)
 	return ESP_OK;
 }
 
+/**
+ * @func    periph_ilidriver_write_char
+ */
 esp_err_t periph_ilidriver_write_char(esp_periph_handle_t periph, font_size_t font_size, uint8_t chr, uint32_t color)
 {
 	VALIDATE_ILIDRIVER(periph, ESP_FAIL);
@@ -489,6 +589,9 @@ esp_err_t periph_ilidriver_write_char(esp_periph_handle_t periph, font_size_t fo
 	return ESP_OK;
 }
 
+/**
+ * @func    periph_ilidriver_write_string
+ */
 esp_err_t periph_ilidriver_write_string(esp_periph_handle_t periph, font_size_t font_size, uint8_t *str, uint32_t color)
 {
 	VALIDATE_ILIDRIVER(periph, ESP_FAIL);
@@ -518,6 +621,9 @@ esp_err_t periph_ilidriver_write_string(esp_periph_handle_t periph, font_size_t 
 	return ESP_OK;
 }
 
+/**
+ * @func    periph_ilidriver_draw_pixel
+ */
 esp_err_t periph_ilidriver_draw_pixel(esp_periph_handle_t periph, uint16_t x, uint16_t y, uint32_t color)
 {
 	VALIDATE_ILIDRIVER(periph, ESP_FAIL);
@@ -526,6 +632,9 @@ esp_err_t periph_ilidriver_draw_pixel(esp_periph_handle_t periph, uint16_t x, ui
 	return ESP_OK;
 }
 
+/**
+ * @func    periph_ilidriver_draw_line
+ */
 esp_err_t periph_ilidriver_draw_line(esp_periph_handle_t periph, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint32_t color)
 {
 	VALIDATE_ILIDRIVER(periph, ESP_FAIL);
@@ -534,6 +643,9 @@ esp_err_t periph_ilidriver_draw_line(esp_periph_handle_t periph, uint16_t x1, ui
 	return ESP_OK;
 }
 
+/**
+ * @func    periph_ilidriver_draw_rectangle
+ */
 esp_err_t periph_ilidriver_draw_rectangle(esp_periph_handle_t periph, uint16_t x_origin, uint16_t y_origin, uint16_t width, uint16_t height, uint32_t color)
 {
 	VALIDATE_ILIDRIVER(periph, ESP_FAIL);
@@ -546,6 +658,9 @@ esp_err_t periph_ilidriver_draw_rectangle(esp_periph_handle_t periph, uint16_t x
 	return ESP_OK;
 }
 
+/**
+ * @func    periph_ilidriver_draw_circle
+ */
 esp_err_t periph_ilidriver_draw_circle(esp_periph_handle_t periph, uint16_t x_origin, uint16_t y_origin, uint16_t radius, uint32_t color)
 {
 	VALIDATE_ILIDRIVER(periph, ESP_FAIL);
@@ -586,6 +701,9 @@ esp_err_t periph_ilidriver_draw_circle(esp_periph_handle_t periph, uint16_t x_or
 	return ESP_OK;
 }
 
+/**
+ * @func    periph_ilidriver_set_position
+ */
 esp_err_t periph_ilidriver_set_position(esp_periph_handle_t periph, uint16_t x, uint16_t y)
 {
 	VALIDATE_ILIDRIVER(periph, ESP_FAIL);
@@ -597,6 +715,9 @@ esp_err_t periph_ilidriver_set_position(esp_periph_handle_t periph, uint16_t x, 
 	return ESP_OK;
 }
 
+/**
+ * @func    periph_ilidriver_get_position
+ */
 esp_err_t periph_ilidriver_get_position(esp_periph_handle_t periph, uint16_t *x, uint16_t *y)
 {
 	VALIDATE_ILIDRIVER(periph, ESP_FAIL);
@@ -608,6 +729,9 @@ esp_err_t periph_ilidriver_get_position(esp_periph_handle_t periph, uint16_t *x,
 	return ESP_OK;
 }
 
+/**
+ * @func    periph_ilidriver_pause
+ */
 esp_err_t periph_ilidriver_pause(esp_periph_handle_t periph)
 {
 	VALIDATE_ILIDRIVER(periph, ESP_FAIL);
@@ -618,6 +742,9 @@ esp_err_t periph_ilidriver_pause(esp_periph_handle_t periph)
 
 }
 
+/**
+ * @func    periph_ilidriver_start
+ */
 esp_err_t periph_ilidriver_start(esp_periph_handle_t periph)
 {
 	VALIDATE_ILIDRIVER(periph, ESP_FAIL);
@@ -627,6 +754,9 @@ esp_err_t periph_ilidriver_start(esp_periph_handle_t periph)
 	return ESP_OK;
 }
 
+/**
+ * @func    periph_ilidriver_get_buffer
+ */
 uint8_t *periph_ilidriver_get_buffer(esp_periph_handle_t periph)
 {
 	VALIDATE_ILIDRIVER(periph, NULL);
