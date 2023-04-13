@@ -36,7 +36,6 @@
 
 #include "esp_peripherals.h"
 #include "fonts.h"
-#include "colors.h"
 
 #ifdef __cplusplus
 extern "C" {

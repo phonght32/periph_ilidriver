@@ -60,7 +60,7 @@
  * @struct  LCD configuration structure.
  */
 typedef struct {
-	uint8_t cmd; 			
+	uint8_t cmd;
 	uint8_t data[16];
 	uint8_t databytes; 		/*!< No of data in data; bit 7 = delay after set; 0xFF = end of cmds. */
 } lcd_init_cmd_t;
@@ -110,7 +110,7 @@ static const char *TAG = "PERIPH_ILIDRIVER";
 static esp_periph_handle_t g_ilidriver;
 
 /**
- * @array 	LCD initialization commands.    
+ * @array 	LCD initialization commands.
  */
 DRAM_ATTR static const lcd_init_cmd_t ili_init_cmds[] = {
 	/* Power contorl B, power control = 0, DC_ENA = 1 */
@@ -370,9 +370,11 @@ static void _convert_pixel_to_lines(int height_idx)
 		uint8_t *p_src = periph_ilidriver->buf + periph_ilidriver->width * height_idx * 3 + idx * 3;
 		uint16_t *p_desc = periph_ilidriver->lines[periph_ilidriver->lines_idx].data + idx;
 
-		uint32_t rgb = (p_src[0] << 16) | (p_src[1] << 8) | (p_src[2]);
-		uint16_t swap565;
-		rgb_2_swap565(rgb, &swap565);
+		uint16_t color_565 = (((uint16_t)p_src[0] & 0x00F8) << 8) |
+		                     (((uint16_t)p_src[1] & 0x00FC) << 3) |
+		                     ((uint16_t)p_src[2] >> 3);
+		uint16_t swap565 = ((color_565 << 8) & 0xFF00) | ((color_565 >> 8) & 0x00FF);
+
 		*p_desc = swap565;
 	}
 }
